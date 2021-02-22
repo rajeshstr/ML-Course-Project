@@ -1,0 +1,98 @@
+PRACTICAL MACHINE LEARNING PROJECT
+==================================
+* Author: Rajesh T
+* Date: 21 Feb 2021
+
+## INTRODUCTION
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise.
+
+## DATA IMPORT
+### Loading Library
+```{r, echo=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+
+### Importing the Dataset
+```{r, echo=FALSE}
+trainRaw  <- read.csv('pml-training.csv',header=T)
+testRaw  <- read.csv('pml-testing.csv',header=T)
+print('Number of rows in training dataset:')
+dim(trainRaw)
+print('Number of rows in test dataset:')
+dim(testRaw )
+```
+
+## DATA PRE-PROCESSING
+* In this step, we will clean the data and get rid of observations with missing values as well as some meaningless variables
+* First, we remove columns that contain NA missing values.
+* Next, we get rid of some columns that do not contribute much to the accelerometer measurements.
+```{r, echo=FALSE}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0]
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0]
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+
+### Data Partitioning
+* Spliting the cleaned training set into a pure training data set (70%) and a validation data set (30%). We will use the validation data set to conduct cross validation in future steps.split the cleaned training set into a pure training data set (70%) and a validation data set (30%). We will use the validation data set to conduct cross validation in future steps.
+
+```{r, echo=FALSE}
+set.seed(100) 
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+
+## MODEL GENERATION
+### Random Forest Predictive Model
+* We fit a predictive model for activity recognition using Random Forest algorithm because it automatically selects important variables and is robust to correlated covariates & outliers in general. We will use 5-fold cross validation when applying the algorithm.
+
+```{r, echo=TRUE}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+
+testData$classe <- as.factor(testData$classe)
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+
+accuracy <- postResample(predictRf, testData$classe)
+print('Accuracy of the model: ')
+accuracy
+
+oose <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose
+```
+* Estimated accuracy of the model is 99.30% and the estimated out-of-sample error is 0.70%
+
+
+### Predicting on Test Dataset
+* Now, we apply the model to the original testing data set downloaded from the data source. We remove the problem_id column first
+```{r, echo=TRUE}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```
+
+## APPENDIX: FIGURES
+### 1. Correlation Matrix Visualization
+```{r, echo=TRUE}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="color")
+```
+
+### 2. Tree Model
+```{r, echo=TRUE}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel)
+```
